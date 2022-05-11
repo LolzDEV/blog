@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet"
+      href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/default.min.css">
+    <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <link rel="stylesheet" href="../style.css">
+    <title>Making a programming language - Lorenzo Torres</title>
+</head>
+<body>
+    <ul class="nav">
+        <li><a href="/">Home</a></li>
+        <li><a href="/posts">Posts</a></li>
+    </ul>
+    <br>
+    <br>
+    <article class="post">
+        <h2>Making a programming language</h2>
+        <section class="main">
+            <p>Creating a compiler from scratch is an interesting project since you can create a programming language as you like and maybe use it for your projects.</p>
+            <p>This is not the first programming language I make, <a href="https://github.com/LolzDEV/zync">zync</a> was the first I ever created and it's actually usable, however I find the codebase very difficult to mantain so I decided to start a new project: <a href="https://github.com/LolzDEV/brom">brom</a>. That being said, let's talk about <b>how to create a working compiler.</b></p>
+            <p>The first thing we have to do is having a working <b>lexer</b></p>
+            <h4>What does the lexer do?</h4>
+            <p>The lexing process consist in processing the source code and retreiving <b>tokens</b> from it. Since computers aren't good at understanding text we need to translate text into more convenient data.</p>
+            <p>We can define a token like this:</p>
+            <pre>
+                <code class="language-c">
+                // Token data structure
+                typedef struct token {
+                    char *lexeme;
+                    enum TokenType type;
+                    struct token *next;
+                } token_t;
+                </code>
+            </pre>
+            <p>Take the following C code as an example</p>
+            <pre>
+                <code class="language-c">
+                int a = 7;
+                </code>
+            </pre>
+            <p>After lexing this source code we should have a token for each element: one for the `int` type, one for the `a` identifier, one for the `=` operator, one for the `7` numeric literal and one for the `;`</p>
+            <p>Looking at the data structure defined previously, we define as the token's `lexeme` the literal form, for example the lexeme of the `a` token is "a". Then we need an enum defining all the token types</p>
+            <pre>
+                <code class="language-c">
+                enum TokenType {
+                    Type,
+                    Identifier,
+                    Assign,
+                    Plus,
+                    Minus,
+                    Star,
+                    Slash,
+                    LParen,
+                    RParen,
+                    NumericLiteral,
+                    SemiColon,
+                    Start,
+                }:
+                </code>
+            </pre>
+            <p>Now we can implement <b>lexing</b>, I'll not show the code here because it would be too big but you can always take a look at <a href="https://github.com/LolzDEV/brom">brom</a>. You can implement it as you prefer, the important thing is that at the end you will have a list of tokens.</p>
+            <p>Once we get the list of tokens we can start with <b>parsing</b></p>
+            <h4>What's a parser?</h4>
+            <p>The parser is the main part of the compiler regarding the syntax, the main goal of it is to produce the <b>abstract syntax tree</b> which from now on I'll refer to as <b>AST</b>.</p>
+            <p>Imagine having to parse this:</p>
+            <pre>
+                <code class="language-c">
+                    1 + 3
+                </code>
+            </pre>
+            <p>This is called an expression and it would be parsed like this:</p>
+            <pre>
+                <code class="language-c">
+                +
+                ├── 1
+                └── 3
+                </code>
+            </pre>
+            <p>This looks easy! But what if we have some more complex expression?</p>
+            <pre>
+                <code class="language-c">
+                    1 + 3 * 4 - 2
+                </code>
+            </pre>
+            <p>Well, this doesn't seem too difficult be we have a problem: operator precedence. Solving this expression we expect to get `11` as result because the `*` operator as higher precedence, so the resulting AST should be someting like this:</p>
+            <pre>
+                <code class="language-c">
+                -
+                ├── +
+                │   ├── 1
+                │   └── *
+                │       ├── 3
+                │       └── 4
+                └── 2 
+                </code>
+            </pre>
+            <p>Now this is complex! We cannot just proceed one by one looking at the tokens, we need a more complex algorithm. Luckily for us smart people invented <b>Recursive descent parsing</b>. This alogrithm isn't hard to understand:</p>
+            <ul>
+                <li>You check for the operation with least precedence (addiction/subraction)</li>
+                <li>When you have to get a term for the operation you check for the operation with higher precedence</li>
+            </ul>
+            <pre>
+                <code class="language-c">
+                // Pseudo code
+
+                // addiction/subraction
+                node_t *term(token_t *tokens)
+                {
+                    node_t *result = factor(tokens);
+
+                    while (check_token(tokens, Plus) || check_token(tokens, Minus)) {
+                        node_t *new = create_node(BinaryExpr);
+                        push_child(new, result);
+                        result = new;
+                        advance(tokens); // Consume the operator token.
+                        node_t *right = factor(tokens);
+                        push_child(result, right);
+                    }
+
+                    return result;
+                }
+
+                // multiplication/division
+                node_t *factor(token_t *tokens)
+                {
+                    node_t *result = unary(tokens);
+
+                    while (check_token(tokens, Star) || check_token(tokens, Slash)) {
+                        node_t *new = create_node(BinaryExpr);
+                        push_child(new, result);
+                        result = new;
+                        advance(tokens); // Consume the operator token.
+                        node_t *right = unary(tokens);
+                        push_child(result, right);
+                    }
+
+                    return result;
+                }
+
+                // negate sign (e.g -3)
+                node_t *unary(token_t *tokens)
+                {
+                    if (check_token(tokens, Minus)) {
+                        node_t *result = create_node(UnaryExpr);
+                        advance(tokens); // Consume the operator token.
+                        push_child(result, primary(tokens));
+
+                        return result;
+                    }
+
+                    return primary(tokens);
+                }
+
+                // number literals
+                node_t *primary(token_t *tokens)
+                {
+                    if (check_token(tokens, Number)) {
+                        return tokens;
+                    }
+                }
+                </code>
+            </pre>
+            <p>That's it! This is a very simplified parser and it can only parse numeric expressions without parenthesis, however you could easily improve this using the same method and implement other features like functions.</p>
+            <h3>Next steps</h3>
+            <p>Now there are some considerations we have to do. If our language is interpreted we could just walk the AST and execute expressions directly, but if it is compiled we have to walk the tree and <b>generate the code</b>. The code generation is done for both natively compiled languages (like C) and languages with a virtual machine (like Java). The former has to generate assembly code for target architecture while the latter has to generate virtual machine bytecode.</p>
+            <p>Personally, I prefer natively compiled languages but targeting all the existing architectures is not easy because there are a lot of different architectures out there. What we can do is compile to an <b>intermediate representation</b> or <b>IR</b> which will get compiled into native assembly later on. A commonly adopted solution is to use a <b>compiler backend</b> like <a href="https://llvm.org">LLVM</a>; LLVM is used by a lot of modern compilers including <b>Rust</b>, <b>Swift</b> and <b>Clang</b>. I decided to use LLVM to implement the <b>brom</b> compiler too so let's talk about that.</p>
+            <h3>Implementing a compiler front-end using LLVM</h3>
+            <p>LLVM exposes an API to generate the <b>IR</b>. I'm not going to cover the usage of the LLVM api since it's widely covered with examples on the web and it's not something hard to understand, also the code generation is not something standard, you have to make your own decisions for that and implement it as you like. If you want to, you can always look at <a href="https://github.com/LolzDEV/zync">zync</a> which is written in Rust and <a href="https://github.com/LolzDEV/brom">brom</a> which is written in C++.</p>
+            <footer>
+            <p>
+                Posted on
+                <time datetime="2022-05-07 19:00">May 7</time>
+            </p>
+            </footer>
+      </article>
+</body>
+</html>

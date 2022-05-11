@@ -1,0 +1,17 @@
+ul.nav {
+    padding-left: 0px;
+    list-style-type: none;
+    text-align: center;
+    text-align: center;
+}
+
+ul.nav li {
+    float: left;
+}
+
+ul.nav li a {
+  display: block;
+  text-align: center;
+  padding: 16px;
+  text-decoration: none;
+}
